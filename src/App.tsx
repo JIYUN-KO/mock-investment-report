@@ -399,24 +399,6 @@ export function App() {
             <Metric label="전체 수익률" value={`${percent.format(summary.returnRate)}%`} tone={summary.profit >= 0 ? "good" : "bad"} />
           </section>
 
-          <section className="round-control-panel">
-            <div>
-              <p className="eyebrow">Round Control</p>
-              <h2>{currentRound}라운드 진행 중</h2>
-              <span>버튼을 누르면 현재 라운드 거래를 마감하고 다음 라운드 장부 입력으로 이동합니다.</span>
-            </div>
-            <div className="round-actions">
-              <button className="secondary-action" disabled={currentRound <= 1} type="button" onClick={reopenPreviousRound}>
-                <ArrowLeft size={18} />
-                이전 라운드
-              </button>
-              <button className="primary-action" type="button" onClick={closeCurrentRound}>
-                다음 라운드
-                <ArrowRight size={18} />
-              </button>
-            </div>
-          </section>
-
           <section className="editor-grid">
             <ScenarioEditor
               companies={companies}
@@ -440,6 +422,24 @@ export function App() {
               onSharesChange={setInvestmentShares}
               onClearRound={removeRoundInvestments}
             />
+          </section>
+
+          <section className="round-control-panel">
+            <div>
+              <p className="eyebrow">Round Control</p>
+              <h2>{currentRound}라운드 진행 중</h2>
+              <span>투자장부 입력을 확인한 뒤 현재 라운드를 마감하고 다음 라운드로 이동합니다.</span>
+            </div>
+            <div className="round-actions">
+              <button className="secondary-action" disabled={currentRound <= 1} type="button" onClick={reopenPreviousRound}>
+                <ArrowLeft size={18} />
+                이전 라운드
+              </button>
+              <button className="primary-action" type="button" onClick={closeCurrentRound}>
+                다음 라운드
+                <ArrowRight size={18} />
+              </button>
+            </div>
           </section>
         </>
       ) : null}

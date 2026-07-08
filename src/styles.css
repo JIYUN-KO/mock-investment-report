@@ -349,6 +349,10 @@ h2 {
   box-shadow: 0 12px 30px rgba(31, 41, 55, 0.07);
 }
 
+.wide-panel {
+  grid-column: 1 / -1;
+}
+
 .ledger-panel {
   grid-column: 1 / -1;
 }
@@ -1218,8 +1222,13 @@ td:first-child {
     display: grid;
   }
 
-  .primary-action {
+  .primary-action,
+  .secondary-action {
     justify-content: center;
+    width: 100%;
+  }
+
+  .round-actions {
     width: 100%;
   }
 
