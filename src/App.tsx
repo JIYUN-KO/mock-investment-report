@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
 import { ArrowLeft, ArrowRight, BarChart3, Download, Plus, Printer, Search, Settings, Trash2, Trophy, UserRound } from "lucide-react";
@@ -21,6 +21,7 @@ const money = new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW
 const percent = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 const kakaoKey = import.meta.env.VITE_KAKAO_JAVASCRIPT_KEY;
 const storageKey = "mock-investment-workbook-v1";
+const syncChannelName = "mock-investment-workbook-sync";
 const authStorageKey = "mock-investment-auth-v1";
 const adminPassword = "admin1234";
 type ViewMode = "admin" | "investor";
@@ -51,6 +52,9 @@ export function App() {
   const [viewMode, setViewMode] = useState<ViewMode>("admin");
   const [session, setSession] = useState<AuthSession | null>(savedSession);
   const [shareStatus, setShareStatus] = useState("투자 장부와 변동률을 수정하면 결과가 즉시 반영됩니다.");
+  const lastWorkbookRawRef = useRef("");
+  const applyingRemoteWorkbookRef = useRef(false);
+  const syncChannelRef = useRef<BroadcastChannel | null>(null);
 
   const rounds = useMemo(() => makeRounds(roundCount), [roundCount]);
   const reports = useMemo(() => buildReports(investments, companies, roundCount), [investments, companies, roundCount]);
@@ -77,25 +81,73 @@ export function App() {
     }
   }, []);
 
+  function applyWorkbookRaw(raw: string, message: string) {
+    if (!raw || raw === lastWorkbookRawRef.current) return;
+    const next = parseSavedWorkbook(raw);
+    if (!next) return;
+    applyingRemoteWorkbookRef.current = true;
+    lastWorkbookRawRef.current = raw;
+    setCompanies(next.companies);
+    setInvestments(next.investments);
+    setRoundCount(next.roundCount);
+    setCurrentRound(next.currentRound);
+    setLedgerRound((current) => Math.min(Math.max(1, current), next.roundCount));
+    setShareStatus(message);
+  }
+
   useEffect(() => {
-    localStorage.setItem(storageKey, JSON.stringify({ companies, investments, roundCount, currentRound }));
+    const raw = serializeWorkbook({ companies, investments, roundCount, currentRound });
+    if (raw === lastWorkbookRawRef.current) return;
+    lastWorkbookRawRef.current = raw;
+    localStorage.setItem(storageKey, raw);
+    if (!applyingRemoteWorkbookRef.current) {
+      syncChannelRef.current?.postMessage({ raw, type: "workbook" });
+    }
+    applyingRemoteWorkbookRef.current = false;
   }, [companies, investments, roundCount, currentRound]);
 
   useEffect(() => {
-    function syncWorkbook(event: StorageEvent) {
-      if (event.key !== storageKey || !event.newValue) return;
-      const next = parseSavedWorkbook(event.newValue);
-      if (!next) return;
-      setCompanies(next.companies);
-      setInvestments(next.investments);
-      setRoundCount(next.roundCount);
-      setCurrentRound(next.currentRound);
-      setLedgerRound((current) => Math.min(Math.max(1, current), next.roundCount));
-      setShareStatus("다른 화면에서 수정한 투자 장부를 반영했습니다.");
+    function refreshFromStorage(message = "다른 화면에서 수정한 투자 장부를 반영했습니다.") {
+      const raw = localStorage.getItem(storageKey);
+      if (raw) applyWorkbookRaw(raw, message);
     }
 
+    function syncWorkbook(event: StorageEvent) {
+      if (event.key !== storageKey || !event.newValue) return;
+      applyWorkbookRaw(event.newValue, "다른 화면에서 수정한 투자 장부를 반영했습니다.");
+    }
+
+    const channel = "BroadcastChannel" in window ? new BroadcastChannel(syncChannelName) : null;
+    syncChannelRef.current = channel;
+    if (channel) {
+      channel.onmessage = (event) => {
+        if (event.data?.type === "workbook" && typeof event.data.raw === "string") {
+          applyWorkbookRaw(event.data.raw, "관리자 화면의 변경사항을 실시간으로 반영했습니다.");
+        }
+      };
+    }
+
+    const interval = window.setInterval(() => refreshFromStorage("저장된 최신 투자 장부를 반영했습니다."), 800);
+    const onFocus = () => refreshFromStorage();
+    const onVisibilityChange = () => {
+      if (!document.hidden) refreshFromStorage();
+    };
+
+    refreshFromStorage("저장된 최신 투자 장부를 불러왔습니다.");
     window.addEventListener("storage", syncWorkbook);
-    return () => window.removeEventListener("storage", syncWorkbook);
+    window.addEventListener("focus", onFocus);
+    window.addEventListener("pageshow", onFocus);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("storage", syncWorkbook);
+      window.removeEventListener("focus", onFocus);
+      window.removeEventListener("pageshow", onFocus);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      channel?.close();
+      if (syncChannelRef.current === channel) syncChannelRef.current = null;
+    };
   }, []);
 
   function updateCompanyRate(companyIndex: number, roundIndex: number, value: string) {
@@ -1129,6 +1181,10 @@ function loadSavedWorkbook() {
   } catch {
     return null;
   }
+}
+
+function serializeWorkbook(workbook: { companies: Company[]; investments: Investment[]; roundCount: number; currentRound: number }) {
+  return JSON.stringify(workbook);
 }
 
 function parseSavedWorkbook(raw: string) {
