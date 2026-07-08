@@ -16,6 +16,7 @@ import {
   makeRounds,
   summarize
 } from "./investment";
+import { isSupabaseEnabled, loadRemoteWorkbook, saveRemoteWorkbook, subscribeRemoteWorkbook } from "./supabaseWorkbook";
 
 const money = new Intl.NumberFormat("ko-KR", { style: "currency", currency: "KRW", maximumFractionDigits: 0 });
 const percent = new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
@@ -55,6 +56,7 @@ export function App() {
   const lastWorkbookRawRef = useRef("");
   const applyingRemoteWorkbookRef = useRef(false);
   const syncChannelRef = useRef<BroadcastChannel | null>(null);
+  const remoteSaveTimerRef = useRef<number | null>(null);
 
   const rounds = useMemo(() => makeRounds(roundCount), [roundCount]);
   const reports = useMemo(() => buildReports(investments, companies, roundCount), [investments, companies, roundCount]);
@@ -102,6 +104,15 @@ export function App() {
     localStorage.setItem(storageKey, raw);
     if (!applyingRemoteWorkbookRef.current) {
       syncChannelRef.current?.postMessage({ raw, type: "workbook" });
+      if (isSupabaseEnabled) {
+        if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
+        remoteSaveTimerRef.current = window.setTimeout(() => {
+          void saveRemoteWorkbook(raw).catch((error) => {
+            console.error("Supabase save failed", error);
+            setShareStatus("Supabase 저장 중 문제가 발생했습니다. 네트워크와 환경변수를 확인해주세요.");
+          });
+        }, 250);
+      }
     }
     applyingRemoteWorkbookRef.current = false;
   }, [companies, investments, roundCount, currentRound]);
@@ -133,7 +144,30 @@ export function App() {
       if (!document.hidden) refreshFromStorage();
     };
 
-    refreshFromStorage("저장된 최신 투자 장부를 불러왔습니다.");
+    if (isSupabaseEnabled) {
+      void loadRemoteWorkbook()
+        .then((raw) => {
+          if (raw && parseSavedWorkbook(raw)) {
+            applyWorkbookRaw(raw, "Supabase 서버 장부를 불러왔습니다.");
+          } else {
+            void saveRemoteWorkbook(serializeWorkbook({ companies, investments, roundCount, currentRound }));
+            setShareStatus("Supabase에 공용 장부를 새로 만들었습니다.");
+          }
+        })
+        .catch((error) => {
+          console.error("Supabase load failed", error);
+          refreshFromStorage("Supabase 연결에 실패해 이 브라우저의 저장 장부를 불러왔습니다.");
+        });
+    } else {
+      refreshFromStorage("저장된 최신 투자 장부를 불러왔습니다.");
+    }
+
+    const unsubscribeRemote = subscribeRemoteWorkbook((raw) => {
+      if (parseSavedWorkbook(raw)) {
+        applyWorkbookRaw(raw, "Supabase 서버의 최신 장부를 실시간으로 반영했습니다.");
+      }
+    });
+
     window.addEventListener("storage", syncWorkbook);
     window.addEventListener("focus", onFocus);
     window.addEventListener("pageshow", onFocus);
@@ -147,6 +181,8 @@ export function App() {
       document.removeEventListener("visibilitychange", onVisibilityChange);
       channel?.close();
       if (syncChannelRef.current === channel) syncChannelRef.current = null;
+      unsubscribeRemote();
+      if (remoteSaveTimerRef.current) window.clearTimeout(remoteSaveTimerRef.current);
     };
   }, []);
 
