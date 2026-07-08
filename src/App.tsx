@@ -81,6 +81,23 @@ export function App() {
     localStorage.setItem(storageKey, JSON.stringify({ companies, investments, roundCount, currentRound }));
   }, [companies, investments, roundCount, currentRound]);
 
+  useEffect(() => {
+    function syncWorkbook(event: StorageEvent) {
+      if (event.key !== storageKey || !event.newValue) return;
+      const next = parseSavedWorkbook(event.newValue);
+      if (!next) return;
+      setCompanies(next.companies);
+      setInvestments(next.investments);
+      setRoundCount(next.roundCount);
+      setCurrentRound(next.currentRound);
+      setLedgerRound((current) => Math.min(Math.max(1, current), next.roundCount));
+      setShareStatus("다른 화면에서 수정한 투자 장부를 반영했습니다.");
+    }
+
+    window.addEventListener("storage", syncWorkbook);
+    return () => window.removeEventListener("storage", syncWorkbook);
+  }, []);
+
   function updateCompanyRate(companyIndex: number, roundIndex: number, value: string) {
     setCompanies((current) =>
       current.map((company, index) =>
@@ -382,6 +399,7 @@ export function App() {
               rank={visibleRank || activeRank}
               total={reports.length}
               rankingRows={chartRows}
+              currentRound={currentRound}
             />
           ) : (
             <EmptyState />
@@ -743,12 +761,14 @@ function Report({
   report,
   rank,
   total,
-  rankingRows
+  rankingRows,
+  currentRound
 }: {
   report: InvestorReport;
   rank: number;
   total: number;
   rankingRows: Array<{ name: string; 순위: number; 수익률: number; 평가손익: number }>;
+  currentRound: number;
 }) {
   const score = investmentScore(report);
   const grade = investmentGrade(score, report.returnRate);
@@ -812,6 +832,45 @@ function Report({
       <section className="teacher-comment">
         <span>투자 종합 의견</span>
         <p>{comment}</p>
+      </section>
+
+      <section className="round-flow">
+        <div className="section-title-row">
+          <div>
+            <span>라운드별 자산 흐름</span>
+            <strong>{currentRound}라운드 기준 반영 현황</strong>
+          </div>
+        </div>
+        <table className="round-flow-table">
+          <thead>
+            <tr>
+              <th>라운드</th>
+              <th>상태</th>
+              <th>시작자산</th>
+              <th>투자금액</th>
+              <th>현금</th>
+              <th>손익</th>
+              <th>마감자산</th>
+            </tr>
+          </thead>
+          <tbody>
+            {report.rounds.map((round) => (
+              <tr key={round.round}>
+                <td>{round.round}R</td>
+                <td>
+                  <span className={`round-status ${round.round < currentRound ? "done" : round.round === currentRound ? "active" : "waiting"}`}>
+                    {round.round < currentRound ? "마감" : round.round === currentRound ? "진행중" : "예정"}
+                  </span>
+                </td>
+                <td>{money.format(round.startAsset)}</td>
+                <td>{money.format(round.invested)}</td>
+                <td>{money.format(round.cash)}</td>
+                <td className={round.profit >= 0 ? "good" : "bad"}>{money.format(round.profit)}</td>
+                <td>{money.format(round.endAsset)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </section>
 
       <table className="report-table">
@@ -1049,6 +1108,14 @@ function loadSavedWorkbook() {
   try {
     const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
+    return parseSavedWorkbook(raw);
+  } catch {
+    return null;
+  }
+}
+
+function parseSavedWorkbook(raw: string) {
+  try {
     const parsed = JSON.parse(raw) as {
       companies?: Partial<Company>[];
       investments?: Array<Partial<Investment> & { amount?: number }>;
@@ -1084,11 +1151,12 @@ function loadSavedWorkbook() {
         shares: migratedShares
       };
     });
+    const currentRound = Math.min(Math.max(1, Number(parsed.currentRound ?? 1)), savedRoundCount);
     return {
       companies,
       investments,
       roundCount: savedRoundCount,
-      currentRound: Math.min(Math.max(1, Number(parsed.currentRound ?? 1)), savedRoundCount)
+      currentRound
     };
   } catch {
     return null;
