@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import html2canvas from "html2canvas";
 import { jsPDF } from "jspdf";
-import { ArrowRight, BarChart3, Download, Plus, Printer, Search, Settings, Trash2, Trophy, UserRound } from "lucide-react";
+import { ArrowLeft, ArrowRight, BarChart3, Download, Plus, Printer, Search, Settings, Trash2, Trophy, UserRound } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import {
   buildReports,
@@ -175,6 +175,17 @@ export function App() {
     setShareStatus(`${currentRound}라운드를 마감하고 ${nextRound}라운드를 시작했습니다.`);
   }
 
+  function reopenPreviousRound() {
+    if (currentRound <= 1) {
+      setShareStatus("이미 1라운드입니다. 이전 라운드로 돌아갈 수 없습니다.");
+      return;
+    }
+    const previousRound = currentRound - 1;
+    setCurrentRound(previousRound);
+    setLedgerRound(previousRound);
+    setShareStatus(`${previousRound}라운드로 되돌렸습니다. 해당 라운드 장부를 다시 수정할 수 있습니다.`);
+  }
+
   function setInvestmentShares(group: string, round: number, company: string, shares: number) {
     setInvestments((current) => {
       const companyInfo = companies.find((item) => item.name === company);
@@ -306,10 +317,16 @@ export function App() {
               <h2>{currentRound}라운드 진행 중</h2>
               <span>버튼을 누르면 현재 라운드 거래를 마감하고 다음 라운드 장부 입력으로 이동합니다.</span>
             </div>
-            <button className="primary-action" type="button" onClick={closeCurrentRound}>
-              다음 라운드
-              <ArrowRight size={18} />
-            </button>
+            <div className="round-actions">
+              <button className="secondary-action" disabled={currentRound <= 1} type="button" onClick={reopenPreviousRound}>
+                <ArrowLeft size={18} />
+                이전 라운드
+              </button>
+              <button className="primary-action" type="button" onClick={closeCurrentRound}>
+                다음 라운드
+                <ArrowRight size={18} />
+              </button>
+            </div>
           </section>
 
           <section className="editor-grid">
