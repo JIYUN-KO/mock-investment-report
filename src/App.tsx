@@ -10,6 +10,7 @@ import {
   defaultCompanies,
   defaultGroups,
   defaultInvestments,
+  getEffectiveShares,
   initialCapital,
   Investment,
   InvestorReport,
@@ -59,7 +60,7 @@ export function App() {
   const remoteSaveTimerRef = useRef<number | null>(null);
 
   const rounds = useMemo(() => makeRounds(roundCount), [roundCount]);
-  const reports = useMemo(() => buildReports(investments, companies, roundCount), [investments, companies, roundCount]);
+  const reports = useMemo(() => buildReports(investments, companies, roundCount, currentRound), [investments, companies, roundCount, currentRound]);
   const summary = useMemo(() => summarize(reports), [reports]);
   const groupOrderedReports = useMemo(() => [...reports].sort(compareInvestorName), [reports]);
   const filteredReports = reports.filter((report) => report.investor.toLowerCase().includes(query.trim().toLowerCase()));
@@ -279,9 +280,9 @@ export function App() {
       const companyInfo = companies.find((item) => item.name === company);
       const price = companyInfo?.price ?? 0;
       const startAsset = reports.find((report) => report.investor === group)?.rounds.find((item) => item.round === round)?.startAsset ?? initialCapital;
-      const otherInvested = current
-        .filter((investment) => investment.group === group && investment.round === round && investment.company !== company)
-        .reduce((total, investment) => total + investment.shares * (companies.find((item) => item.name === investment.company)?.price ?? 0), 0);
+      const otherInvested = companies
+        .filter((item) => item.name !== company)
+        .reduce((total, item) => total + getEffectiveShares(current, group, item.name, round) * item.price, 0);
       const maxShares = price > 0 ? Math.max(0, Math.floor((startAsset - otherInvested) / price)) : 0;
       const safeShares = Math.min(Math.max(0, shares), maxShares);
       if (shares > safeShares) {
@@ -289,13 +290,16 @@ export function App() {
       }
       return [
         ...current.filter((investment) => !(investment.group === group && investment.round === round && investment.company === company)),
-        ...(safeShares > 0 ? [{ group, round, company, shares: safeShares }] : [])
+        ...(safeShares > 0 || round > 1 ? [{ group, round, company, shares: safeShares }] : [])
       ];
     });
   }
 
   function removeRoundInvestments(group: string, round: number) {
-    setInvestments((current) => current.filter((investment) => !(investment.group === group && investment.round === round)));
+    setInvestments((current) => [
+      ...current.filter((investment) => !(investment.group === group && investment.round === round)),
+      ...(round > 1 ? companies.map((company) => ({ group, round, company: company.name, shares: 0 })) : [])
+    ]);
   }
 
   function resetFromWorkbook() {
@@ -759,7 +763,7 @@ function InvestmentEditor({
   const isClosedRound = activeRound < currentRound;
 
   function sharesFor(group: string, company: string) {
-    return investments.find((investment) => investment.group === group && investment.round === activeRound && investment.company === company)?.shares ?? 0;
+    return getEffectiveShares(investments, group, company, activeRound);
   }
 
   return (

@@ -66,38 +66,54 @@ export const defaultInvestments: Investment[] = [
   { group: "2모둠", round: 1, company: "파인애플", shares: 2 }
 ];
 
-export function buildReports(investments: Investment[], companies: Company[], roundCount: number): InvestorReport[] {
+export function buildReports(investments: Investment[], companies: Company[], roundCount: number, currentRound = roundCount): InvestorReport[] {
   const groups = Array.from(new Set([...defaultGroups, ...investments.map((investment) => investment.group).filter(Boolean)]));
   const rounds = makeRounds(roundCount);
+  const activeRoundLimit = Math.min(Math.max(1, currentRound), roundCount);
 
   return groups
     .map((group) => {
       let asset = initialCapital;
+      const carriedShares = new Map<string, number>();
       const holdings: Holding[] = [];
       const roundSummaries: RoundSummary[] = [];
 
       for (const round of rounds) {
-        const roundInvestments = investments.filter(
-          (investment) => investment.group === group && investment.round === round && investment.company && investment.shares > 0
-        );
         const startAsset = asset;
-        const roundHoldings = roundInvestments.map((investment) => {
-          const company = findCompany(companies, investment.company);
-          const price = company?.price ?? 0;
-          const amount = investment.shares * price;
+
+        if (round > activeRoundLimit) {
+          roundSummaries.push({ round, startAsset, invested: 0, cash: startAsset, value: 0, profit: 0, endAsset: startAsset, overspent: 0 });
+          continue;
+        }
+
+        const explicitShares = new Map(
+          investments
+            .filter((investment) => investment.group === group && investment.round === round && investment.company)
+            .map((investment) => [investment.company, Math.max(0, investment.shares)])
+        );
+        const roundHoldings = companies.flatMap((company) => {
+          const shares = explicitShares.has(company.name) ? explicitShares.get(company.name) ?? 0 : carriedShares.get(company.name) ?? 0;
+          carriedShares.set(company.name, shares);
+          if (shares <= 0) return [];
+
+          const price = company.price ?? 0;
+          const amount = shares * price;
           const rate = company?.rates[round - 1] ?? 0;
           const value = Math.round(amount * (1 + rate / 100));
           const profit = value - amount;
 
-          return {
-            ...investment,
+          return [{
+            group,
+            round,
+            company: company.name,
+            shares,
             price,
             amount,
             rate,
             value,
             profit,
             returnRate: amount ? (profit / amount) * 100 : 0
-          };
+          }];
         });
         const invested = roundHoldings.reduce((total, holding) => total + holding.amount, 0);
         const overspent = Math.max(0, invested - startAsset);
@@ -126,6 +142,21 @@ export function buildReports(investments: Investment[], companies: Company[], ro
       };
     })
     .sort((a, b) => b.value - a.value);
+}
+
+export function getEffectiveShares(investments: Investment[], group: string, company: string, round: number) {
+  let shares = 0;
+
+  for (const currentRound of makeRounds(round)) {
+    const explicitInvestment = investments.find(
+      (investment) => investment.group === group && investment.company === company && investment.round === currentRound
+    );
+    if (explicitInvestment) {
+      shares = Math.max(0, explicitInvestment.shares);
+    }
+  }
+
+  return shares;
 }
 
 export function summarize(reports: InvestorReport[]) {
