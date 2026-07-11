@@ -309,7 +309,7 @@ export function App() {
     setCurrentRound(1);
     setLedgerRound(1);
     setSelected("1모둠");
-    setShareStatus("OneDrive 원본에서 확인한 기본값으로 되돌렸습니다.");
+    setShareStatus("기본 종목 가격과 빈 투자장부로 초기화했습니다.");
   }
 
   function changeViewMode(nextMode: ViewMode) {

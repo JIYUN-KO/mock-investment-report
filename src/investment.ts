@@ -60,11 +60,7 @@ export const defaultCompanies: Company[] = [
   { name: "버거퀸", price: 410000, rates: [-20, 10, -10, 40, 5, 45, -50] }
 ];
 
-export const defaultInvestments: Investment[] = [
-  { group: "1모둠", round: 1, company: "고대자동차", shares: 2 },
-  { group: "1모둠", round: 1, company: "쌍성전자", shares: 4 },
-  { group: "2모둠", round: 1, company: "파인애플", shares: 2 }
-];
+export const defaultInvestments: Investment[] = [];
 
 export function buildReports(investments: Investment[], companies: Company[], roundCount: number, currentRound = roundCount): InvestorReport[] {
   const groups = Array.from(new Set([...defaultGroups, ...investments.map((investment) => investment.group).filter(Boolean)]));
