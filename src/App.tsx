@@ -14,6 +14,7 @@ import {
   initialCapital,
   Investment,
   InvestorReport,
+  maxGroupCount,
   makeRounds,
   summarize
 } from "./investment";
@@ -46,6 +47,7 @@ export function App() {
   const savedSession = loadAuthSession();
   const [companies, setCompanies] = useState<Company[]>(saved?.companies ?? defaultCompanies);
   const [investments, setInvestments] = useState<Investment[]>(saved?.investments ?? defaultInvestments);
+  const [groupCount, setGroupCount] = useState(saved?.groupCount ?? defaultGroups.length);
   const [roundCount, setRoundCount] = useState(saved?.roundCount ?? defaultRoundCount);
   const [currentRound, setCurrentRound] = useState(saved?.currentRound ?? 1);
   const [ledgerRound, setLedgerRound] = useState(saved?.currentRound ?? 1);
@@ -60,7 +62,10 @@ export function App() {
   const remoteSaveTimerRef = useRef<number | null>(null);
 
   const rounds = useMemo(() => makeRounds(roundCount), [roundCount]);
-  const reports = useMemo(() => buildReports(investments, companies, roundCount, currentRound), [investments, companies, roundCount, currentRound]);
+  const reports = useMemo(
+    () => buildReports(investments, companies, roundCount, currentRound, groupCount),
+    [investments, companies, roundCount, currentRound, groupCount]
+  );
   const summary = useMemo(() => summarize(reports), [reports]);
   const groupOrderedReports = useMemo(() => [...reports].sort(compareInvestorName), [reports]);
   const filteredReports = reports.filter((report) => report.investor.toLowerCase().includes(query.trim().toLowerCase()));
@@ -72,6 +77,12 @@ export function App() {
     수익률: Number(report.returnRate.toFixed(2)),
     평가손익: Math.round(report.profit / 10000)
   }));
+
+  useEffect(() => {
+    if (reports.length > 0 && !reports.some((report) => report.investor === selected)) {
+      setSelected(reports[0].investor);
+    }
+  }, [reports, selected]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -92,6 +103,7 @@ export function App() {
     lastWorkbookRawRef.current = raw;
     setCompanies(next.companies);
     setInvestments(next.investments);
+    setGroupCount(next.groupCount);
     setRoundCount(next.roundCount);
     setCurrentRound(next.currentRound);
     setLedgerRound((current) => Math.min(Math.max(1, current), next.roundCount));
@@ -99,7 +111,7 @@ export function App() {
   }
 
   useEffect(() => {
-    const raw = serializeWorkbook({ companies, investments, roundCount, currentRound });
+    const raw = serializeWorkbook({ companies, investments, groupCount, roundCount, currentRound });
     if (raw === lastWorkbookRawRef.current) return;
     lastWorkbookRawRef.current = raw;
     localStorage.setItem(storageKey, raw);
@@ -116,7 +128,7 @@ export function App() {
       }
     }
     applyingRemoteWorkbookRef.current = false;
-  }, [companies, investments, roundCount, currentRound]);
+  }, [companies, investments, groupCount, roundCount, currentRound]);
 
   useEffect(() => {
     function refreshFromStorage(message = "다른 화면에서 수정한 투자 장부를 반영했습니다.") {
@@ -151,7 +163,7 @@ export function App() {
           if (raw && parseSavedWorkbook(raw)) {
             applyWorkbookRaw(raw, "Supabase 서버 장부를 불러왔습니다.");
           } else {
-            void saveRemoteWorkbook(serializeWorkbook({ companies, investments, roundCount, currentRound }));
+            void saveRemoteWorkbook(serializeWorkbook({ companies, investments, groupCount, roundCount, currentRound }));
             setShareStatus("Supabase에 공용 장부를 새로 만들었습니다.");
           }
         })
@@ -302,9 +314,37 @@ export function App() {
     ]);
   }
 
+  function addGroup() {
+    setGroupCount((current) => {
+      if (current >= maxGroupCount) {
+        setShareStatus(`모둠은 최대 ${maxGroupCount}팀까지 추가할 수 있습니다.`);
+        return current;
+      }
+      const next = current + 1;
+      setSelected(`${next}모둠`);
+      setShareStatus(`${next}모둠을 추가했습니다.`);
+      return next;
+    });
+  }
+
+  function removeGroup() {
+    setGroupCount((current) => {
+      if (current <= 1) {
+        setShareStatus("모둠은 최소 1팀 이상 필요합니다.");
+        return current;
+      }
+      const removedGroup = `${current}모둠`;
+      setInvestments((records) => records.filter((investment) => investment.group !== removedGroup));
+      setSelected((selectedGroup) => (selectedGroup === removedGroup ? "1모둠" : selectedGroup));
+      setShareStatus(`${removedGroup}과 해당 투자 장부를 삭제했습니다.`);
+      return current - 1;
+    });
+  }
+
   function resetFromWorkbook() {
     setCompanies(defaultCompanies);
     setInvestments(defaultInvestments);
+    setGroupCount(defaultGroups.length);
     setRoundCount(defaultRoundCount);
     setCurrentRound(1);
     setLedgerRound(1);
@@ -401,6 +441,24 @@ export function App() {
             <Metric label="현재 라운드" value={`${currentRound}R / ${roundCount}R`} />
             <Metric label="현재 평가금액" value={money.format(summary.value)} />
             <Metric label="전체 수익률" value={`${percent.format(summary.returnRate)}%`} tone={summary.profit >= 0 ? "good" : "bad"} />
+          </section>
+
+          <section className="team-control-panel">
+            <div>
+              <p className="eyebrow">Team Control</p>
+              <h2>참여 모둠 {groupCount}팀</h2>
+              <span>모둠은 최대 {maxGroupCount}팀까지 운영할 수 있습니다. 새 모둠의 투자장부는 0주로 시작합니다.</span>
+            </div>
+            <div className="round-actions">
+              <button className="secondary-action" disabled={groupCount <= 1} type="button" onClick={removeGroup}>
+                <Trash2 size={18} />
+                마지막 모둠 삭제
+              </button>
+              <button className="primary-action" disabled={groupCount >= maxGroupCount} type="button" onClick={addGroup}>
+                <Plus size={18} />
+                모둠 추가
+              </button>
+            </div>
           </section>
 
           <section className="editor-grid">
@@ -1223,7 +1281,7 @@ function loadSavedWorkbook() {
   }
 }
 
-function serializeWorkbook(workbook: { companies: Company[]; investments: Investment[]; roundCount: number; currentRound: number }) {
+function serializeWorkbook(workbook: { companies: Company[]; investments: Investment[]; groupCount: number; roundCount: number; currentRound: number }) {
   return JSON.stringify(workbook);
 }
 
@@ -1232,6 +1290,7 @@ function parseSavedWorkbook(raw: string) {
     const parsed = JSON.parse(raw) as {
       companies?: Partial<Company>[];
       investments?: Array<Partial<Investment> & { amount?: number }>;
+      groupCount?: number;
       roundCount?: number;
       currentRound?: number;
     };
@@ -1264,10 +1323,13 @@ function parseSavedWorkbook(raw: string) {
         shares: migratedShares
       };
     });
+    const inferredGroupCount = Math.max(defaultGroups.length, ...investments.map((investment) => investorNumber(investment.group)).filter(Number.isFinite));
+    const groupCount = Math.min(maxGroupCount, Math.max(1, Number(parsed.groupCount ?? inferredGroupCount)));
     const currentRound = Math.min(Math.max(1, Number(parsed.currentRound ?? 1)), savedRoundCount);
     return {
       companies,
       investments,
+      groupCount,
       roundCount: savedRoundCount,
       currentRound
     };

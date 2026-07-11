@@ -45,9 +45,14 @@ export type InvestorReport = {
 export const initialCapital = 3000000;
 export const defaultGroups = ["1모둠", "2모둠", "3모둠", "4모둠", "5모둠", "6모둠"];
 export const defaultRoundCount = 7;
+export const maxGroupCount = 10;
 
 export function makeRounds(roundCount: number) {
   return Array.from({ length: Math.max(1, roundCount) }, (_, index) => index + 1);
+}
+
+export function makeGroups(groupCount: number) {
+  return Array.from({ length: Math.min(maxGroupCount, Math.max(1, groupCount)) }, (_, index) => `${index + 1}모둠`);
 }
 
 export const defaultCompanies: Company[] = [
@@ -62,8 +67,14 @@ export const defaultCompanies: Company[] = [
 
 export const defaultInvestments: Investment[] = [];
 
-export function buildReports(investments: Investment[], companies: Company[], roundCount: number, currentRound = roundCount): InvestorReport[] {
-  const groups = Array.from(new Set([...defaultGroups, ...investments.map((investment) => investment.group).filter(Boolean)]));
+export function buildReports(
+  investments: Investment[],
+  companies: Company[],
+  roundCount: number,
+  currentRound = roundCount,
+  groupCount = defaultGroups.length
+): InvestorReport[] {
+  const groups = makeGroups(groupCount);
   const rounds = makeRounds(roundCount);
   const activeRoundLimit = Math.min(Math.max(1, currentRound), roundCount);
 

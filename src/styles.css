@@ -272,7 +272,8 @@ h2 {
   margin: 18px 0;
 }
 
-.round-control-panel {
+.round-control-panel,
+.team-control-panel {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -285,7 +286,8 @@ h2 {
   box-shadow: 0 12px 30px rgba(31, 41, 55, 0.07);
 }
 
-.round-control-panel span {
+.round-control-panel span,
+.team-control-panel span {
   display: block;
   margin-top: 6px;
   color: #607087;
@@ -328,6 +330,7 @@ h2 {
   white-space: nowrap;
 }
 
+.primary-action:disabled,
 .secondary-action:disabled {
   cursor: not-allowed;
   opacity: 0.5;
@@ -1218,7 +1221,8 @@ td:first-child {
     grid-template-columns: 1fr;
   }
 
-  .round-control-panel {
+  .round-control-panel,
+  .team-control-panel {
     display: grid;
   }
 
