@@ -56,13 +56,13 @@ export function makeGroups(groupCount: number) {
 }
 
 export const defaultCompanies: Company[] = [
-  { name: "고대자동차", price: 457000, rates: [-5, 8, 15, -35, 10, -5, 40] },
-  { name: "쌍성전자", price: 285000, rates: [25, 5, -15, 12, -8, -40, 50] },
-  { name: "삼선운동화", price: 66000, rates: [2, -8, 30, 5, -12, 15, -5] },
-  { name: "파인애플", price: 470000, rates: [-12, 45, -5, 50, -20, 8, -15] },
-  { name: "구세계", price: 630000, rates: [8, -3, 12, 2, -30, 35, 10] },
-  { name: "바이브", price: 220000, rates: [35, -15, 5, 8, 25, -2, -10] },
-  { name: "버거퀸", price: 410000, rates: [-20, 10, -10, 40, 5, 45, -50] }
+  { name: "고대자동차", price: 457000, rates: [5, -5, 10, 5, -10, 15, 5] },
+  { name: "쌍성전자", price: 285000, rates: [20, -15, 25, -10, 15, -20, 30] },
+  { name: "삼선운동화", price: 66000, rates: [5, 10, -5, 5, 10, -10, 5] },
+  { name: "파인애플", price: 470000, rates: [10, 5, 10, -5, 15, 5, 10] },
+  { name: "구세계", price: 630000, rates: [5, 0, -5, 5, 0, 5, -5] },
+  { name: "바이브", price: 220000, rates: [30, -25, 40, -35, -15, 25, 15] },
+  { name: "버거퀸", price: 410000, rates: [5, 5, -5, 10, 5, 0, 5] }
 ];
 
 export const defaultInvestments: Investment[] = [];
