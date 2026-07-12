@@ -81,7 +81,6 @@ export function buildReports(
   return groups
     .map((group) => {
       let asset = initialCapital;
-      const carriedShares = new Map<string, number>();
       const holdings: Holding[] = [];
       const roundSummaries: RoundSummary[] = [];
 
@@ -93,17 +92,13 @@ export function buildReports(
           continue;
         }
 
-        const explicitShares = new Map(
-          investments
-            .filter((investment) => investment.group === group && investment.round === round && investment.company)
-            .map((investment) => [investment.company, Math.max(0, investment.shares)])
+        const roundInvestments = investments.filter(
+          (investment) => investment.group === group && investment.round === round && investment.company && investment.shares > 0
         );
-        const roundHoldings = companies.flatMap((company) => {
-          const shares = explicitShares.has(company.name) ? explicitShares.get(company.name) ?? 0 : carriedShares.get(company.name) ?? 0;
-          carriedShares.set(company.name, shares);
-          if (shares <= 0) return [];
-
-          const price = company.price ?? 0;
+        const roundHoldings = roundInvestments.flatMap((investment) => {
+          const company = findCompany(companies, investment.company);
+          const price = company?.price ?? 0;
+          const shares = Math.max(0, investment.shares);
           const amount = shares * price;
           const rate = company?.rates[round - 1] ?? 0;
           const value = Math.round(amount * (1 + rate / 100));
@@ -112,7 +107,7 @@ export function buildReports(
           return [{
             group,
             round,
-            company: company.name,
+            company: investment.company,
             shares,
             price,
             amount,
@@ -149,21 +144,6 @@ export function buildReports(
       };
     })
     .sort((a, b) => b.value - a.value);
-}
-
-export function getEffectiveShares(investments: Investment[], group: string, company: string, round: number) {
-  let shares = 0;
-
-  for (const currentRound of makeRounds(round)) {
-    const explicitInvestment = investments.find(
-      (investment) => investment.group === group && investment.company === company && investment.round === currentRound
-    );
-    if (explicitInvestment) {
-      shares = Math.max(0, explicitInvestment.shares);
-    }
-  }
-
-  return shares;
 }
 
 export function summarize(reports: InvestorReport[]) {
