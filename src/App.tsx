@@ -56,6 +56,7 @@ export function App() {
   const [session, setSession] = useState<AuthSession | null>(savedSession);
   const [shareStatus, setShareStatus] = useState("투자 장부와 변동률을 수정하면 결과가 즉시 반영됩니다.");
   const lastWorkbookRawRef = useRef("");
+  const lastWorkbookUpdatedAtRef = useRef(saved?.updatedAt ?? 0);
   const applyingRemoteWorkbookRef = useRef(false);
   const syncChannelRef = useRef<BroadcastChannel | null>(null);
   const remoteSaveTimerRef = useRef<number | null>(null);
@@ -98,8 +99,10 @@ export function App() {
     if (!raw || raw === lastWorkbookRawRef.current) return;
     const next = parseSavedWorkbook(raw);
     if (!next) return;
+    if (next.updatedAt < lastWorkbookUpdatedAtRef.current) return;
     applyingRemoteWorkbookRef.current = true;
     lastWorkbookRawRef.current = raw;
+    lastWorkbookUpdatedAtRef.current = next.updatedAt || Date.now();
     setCompanies(next.companies);
     setInvestments(next.investments);
     setGroupCount(next.groupCount);
@@ -110,9 +113,11 @@ export function App() {
   }
 
   useEffect(() => {
-    const raw = serializeWorkbook({ companies, investments, groupCount, roundCount, currentRound });
+    const updatedAt = Date.now();
+    const raw = serializeWorkbook({ companies, investments, groupCount, roundCount, currentRound }, updatedAt);
     if (raw === lastWorkbookRawRef.current) return;
     lastWorkbookRawRef.current = raw;
+    lastWorkbookUpdatedAtRef.current = updatedAt;
     localStorage.setItem(storageKey, raw);
     if (!applyingRemoteWorkbookRef.current) {
       syncChannelRef.current?.postMessage({ raw, type: "workbook" });
@@ -162,7 +167,7 @@ export function App() {
           if (raw && parseSavedWorkbook(raw)) {
             applyWorkbookRaw(raw, "Supabase 서버 장부를 불러왔습니다.");
           } else {
-            void saveRemoteWorkbook(serializeWorkbook({ companies, investments, groupCount, roundCount, currentRound }));
+            void saveRemoteWorkbook(serializeWorkbook({ companies, investments, groupCount, roundCount, currentRound }, Date.now()));
             setShareStatus("Supabase에 공용 장부를 새로 만들었습니다.");
           }
         })
@@ -1278,8 +1283,11 @@ function loadSavedWorkbook() {
   }
 }
 
-function serializeWorkbook(workbook: { companies: Company[]; investments: Investment[]; groupCount: number; roundCount: number; currentRound: number }) {
-  return JSON.stringify(workbook);
+function serializeWorkbook(
+  workbook: { companies: Company[]; investments: Investment[]; groupCount: number; roundCount: number; currentRound: number },
+  updatedAt = Date.now()
+) {
+  return JSON.stringify({ ...workbook, updatedAt });
 }
 
 function parseSavedWorkbook(raw: string) {
@@ -1290,6 +1298,7 @@ function parseSavedWorkbook(raw: string) {
       groupCount?: number;
       roundCount?: number;
       currentRound?: number;
+      updatedAt?: number;
     };
     if (!Array.isArray(parsed.companies) || !Array.isArray(parsed.investments)) return null;
     const savedRoundCount = Math.max(
@@ -1323,12 +1332,14 @@ function parseSavedWorkbook(raw: string) {
     const inferredGroupCount = Math.max(defaultGroups.length, ...investments.map((investment) => investorNumber(investment.group)).filter(Number.isFinite));
     const groupCount = Math.min(maxGroupCount, Math.max(1, Number(parsed.groupCount ?? inferredGroupCount)));
     const currentRound = Math.min(Math.max(1, Number(parsed.currentRound ?? 1)), savedRoundCount);
+    const updatedAt = Number.isFinite(Number(parsed.updatedAt)) ? Number(parsed.updatedAt) : 0;
     return {
       companies,
       investments,
       groupCount,
       roundCount: savedRoundCount,
-      currentRound
+      currentRound,
+      updatedAt
     };
   } catch {
     return null;
